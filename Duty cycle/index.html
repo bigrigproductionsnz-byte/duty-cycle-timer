@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RCR Duty Cycle Timer</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Duty Cycle">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<meta name="theme-color" content="#f0f4ff">
+<link rel="icon" type="image/x-icon" href="duty-cycle.ico">
+<link rel="apple-touch-icon" href="duty-icon.png">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  html { color-scheme: light; }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --cyan:   #06b6d4;
+    --green:  #22c55e;
+    --red:    #ef4444;
+    --amber:  #f59e0b;
+    --blue:   #1d7cf2;
+    --bg:     #f0f4ff;
+    --card:   #ffffff;
+    --text:   #1a1a2e;
+    --muted:  #7b8ba0;
+    --border: #dde4f0;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 10% 20%, rgba(6,182,212,0.08) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(34,197,94,0.07) 0%, transparent 40%);
+    color: var(--text);
+    font-family: 'Nunito', sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  #boltCanvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: -1;
+  }
+
+  body > *:not(#boltCanvas) { position: relative; z-index: 1; }
+
+  header {
+    text-align: center;
+    margin-bottom: 10px;
+    animation: bounceIn 0.7s cubic-bezier(0.175,0.885,0.32,1.275) both;
+    flex-shrink: 0;
+  }
+
+  .logo-wrap {
+    background: white;
+    border-radius: 16px;
+    padding: 10px 20px;
+    display: inline-block;
+    box-shadow: 0 4px 16px rgba(6,182,212,0.15);
+    margin-bottom: 8px;
+  }
+  .logo-wrap img { height: 44px; width: auto; display: block; }
+
+  .tagline {
+    font-size: 12px; color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    letter-spacing: 0.12em; text-transform: uppercase;
+    background: white; border-radius: 99px;
+    padding: 5px 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+    border: 2px solid var(--border);
+  }
+  .tagline img { height: 18px; width: auto; border-radius: 4px; }
+
+  /* CARD */
+  .card {
+    background: var(--card);
+    border-radius: 20px;
+    padding: 18px 18px 14px;
+    width: 100%; max-width: 440px;
+    box-shadow: 0 8px 40px rgba(6,182,212,0.12);
+    border: 2px solid var(--border);
+    position: relative; overflow: hidden;
+    animation: slideUp 0.6s 0.1s cubic-bezier(0.175,0.885,0.32,1.275) both;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 5px;
+    background: linear-gradient(90deg, var(--green), var(--cyan), var(--amber));
+    border-radius: 20px 20px 0 0;
+  }
+
+  .card-title { font-size: 20px; font-weight: 900; margin-bottom: 2px; }
+  .card-sub { font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; letter-spacing: 0.1em; margin-bottom: 14px; }
+
+  /* STATE DISPLAY */
+  .state-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin-bottom: 14px;
+  }
+  .state-label { font-size: 12px; font-family: 'DM Mono', monospace; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .state-badge {
+    font-family: 'Nunito', sans-serif; font-size: 18px; font-weight: 900;
+    padding: 4px 18px; border-radius: 99px; letter-spacing: 0.05em;
+    transition: all 0.3s;
+  }
+  .state-off  { background: #fef2f2; color: var(--red);   border: 2px solid #fecaca; }
+  .state-on   { background: #f0fdf4; color: var(--green); border: 2px solid #bbf7d0; }
+  .state-done { background: #fffbeb; color: var(--amber); border: 2px solid #fde68a; }
+
+  /* BUTTONS */
+  .btn-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+
+  button {
+    padding: 12px 8px; border: none; border-radius: 12px;
+    font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    width: 100%;
+  }
+  button:active { transform: scale(0.96); }
+  button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-on    { background: linear-gradient(135deg, #22c55e, #16a34a); color: white; box-shadow: 0 4px 14px rgba(34,197,94,0.30); }
+  .btn-off   { background: linear-gradient(135deg, #ef4444, #dc2626); color: white; box-shadow: 0 4px 14px rgba(239,68,68,0.30); }
+  .btn-finish{ background: linear-gradient(135deg, #f59e0b, #d97706); color: white; box-shadow: 0 4px 14px rgba(245,158,11,0.30); }
+  .btn-reset { background: linear-gradient(135deg, #6b7280, #4b5563); color: white; box-shadow: 0 4px 14px rgba(107,114,128,0.20); width: auto; padding: 10px 28px; }
+
+  .msg { text-align: center; font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; min-height: 16px; margin-bottom: 10px; }
+
+  /* DIVIDER */
+  .divider { height: 2px; background: linear-gradient(90deg, transparent, var(--border), transparent); margin: 12px 0; }
+
+  /* RESULT BOX */
+  .result-box {
+    background: linear-gradient(135deg, #0891b2, #0e7490);
+    border-radius: 16px; padding: 14px 18px;
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+    box-shadow: 0 6px 24px rgba(6,182,212,0.35);
+  }
+  .result-label { font-size: 11px; font-family: 'DM Mono', monospace; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.7); margin-bottom: 2px; }
+  .result-formula { font-size: 10px; color: rgba(255,255,255,0.45); font-family: 'DM Mono', monospace; }
+  .result-value { font-family: 'Nunito', sans-serif; font-size: 38px; font-weight: 900; color: white; line-height: 1; }
+  .result-value span { font-size: 18px; opacity: 0.7; font-weight: 700; }
+
+  /* METRICS GRID */
+  .metrics { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+  .metric {
+    background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 8px 6px; text-align: center;
+  }
+  .metric-label { font-size: 9px; font-family: 'DM Mono', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 3px; }
+  .metric-value { font-size: 14px; font-weight: 800; color: var(--text); }
+  .metric-value.green { color: var(--green); }
+  .metric-value.red   { color: var(--red); }
+  .metric-value.cyan  { color: var(--cyan); }
+
+  /* ANIMATIONS */
+  @keyframes bounceIn { from{opacity:0;transform:translateY(-20px) scale(0.95);}to{opacity:1;transform:translateY(0) scale(1);} }
+  @keyframes slideUp  { from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);} }
+  @keyframes flash    { 0%,100%{opacity:1;}50%{opacity:0.4;} }
+  .flash { animation: flash 0.35s ease; }
+
+  /* MODAL */
+  .modal { background:white; border-radius:24px; padding:36px; max-width:320px; width:90%; text-align:center; box-shadow:0 24px 80px rgba(0,0,0,0.18); border:3px solid #fde0e2; }
+  .modal-icon { font-size:52px; margin-bottom:10px; }
+  .modal h2 { font-size:32px; font-weight:900; color:var(--red); margin-bottom:8px; }
+  .modal p { color:var(--text); font-size:14px; font-weight:800; margin-bottom:20px; line-height:1.5; }
+  .modal button { background:linear-gradient(135deg,var(--red),#c0392b); color:white; font-size:14px; }
+
+  /* Force bright controls on all phones */
+  html, body {
+    color-scheme: light !important;
+    background-color: var(--bg) !important;
+  }
+  .card, .logo-wrap, .tagline, .metric, .modal, .result-box, .state-badge,
+  .btn-on, .btn-off, .btn-finish, .btn-reset, .modal button {
+    forced-color-adjust: none;
+  }
+  button,
+  .btn-on,
+  .btn-off,
+  .btn-finish,
+  .btn-reset,
+  .modal button {
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    -webkit-text-fill-color: #ffffff !important;
+    color: #ffffff !important;
+    color-scheme: light !important;
+  }
+  .btn-on {
+    background: linear-gradient(135deg, #22c55e, #16a34a) !important;
+    background-color: #22c55e !important;
+    box-shadow: 0 4px 14px rgba(34,197,94,0.30) !important;
+  }
+  .btn-off {
+    background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+    background-color: #ef4444 !important;
+    box-shadow: 0 4px 14px rgba(239,68,68,0.30) !important;
+  }
+  .btn-finish {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    background-color: #f59e0b !important;
+    box-shadow: 0 4px 14px rgba(245,158,11,0.30) !important;
+  }
+  .btn-reset {
+    background: linear-gradient(135deg, #6b7280, #4b5563) !important;
+    background-color: #6b7280 !important;
+    box-shadow: 0 4px 14px rgba(107,114,128,0.20) !important;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .btn-on {
+      filter: brightness(1.06) saturate(1.08) !important;
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    .btn-off {
+      filter: brightness(1.06) saturate(1.08) !important;
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    .btn-finish {
+      filter: brightness(1.06) saturate(1.08) !important;
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+  }
+
+</style>
+</head>
+<body>
+<canvas id="boltCanvas"></canvas>
+
+<div id="mainContent" style="display:flex;flex-direction:column;align-items:center;width:100%;padding:12px;">
+
+<header>
+  <div class="logo-wrap">
+    <img src="rcr-logo.png" alt="RCR Asset Management Services">
+  </div><br>
+  <span class="tagline">
+    <img src="duty-icon.png" alt="icon">
+    ⏱ DUTY CYCLE TIMER
+  </span>
+</header>
+
+<div class="card">
+  <div class="card-title">Duty Cycle Timer</div>
+  <div class="card-sub">RECORD ON/OFF CYCLES · AUTO-CALCULATES DUTY %</div>
+
+  <div class="state-row">
+    <span class="state-label">Current State:</span>
+    <span id="stateBadge" class="state-badge state-off">OFF</span>
+  </div>
+
+  <div class="btn-row">
+    <button id="onBtn"     class="btn-on"    onclick="switchOn()">▶ Switch ON</button>
+    <button id="offBtn"    class="btn-off"   onclick="switchOff()">■ Switch OFF</button>
+    <button id="finishBtn" class="btn-finish" onclick="finish()">✓ Finish</button>
+  </div>
+
+  <p id="msg" class="msg"></p>
+
+  <div id="results" style="display:none;">
+    <div class="divider"></div>
+
+    <div class="result-box">
+      <div>
+        <div class="result-label">Duty Cycle</div>
+        <div class="result-formula">avg ON ÷ (avg ON + avg OFF)</div>
+      </div>
+      <div class="result-value" id="resDuty">—<span> %</span></div>
+    </div>
+
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-label">Total ON</div>
+        <div class="metric-value green" id="resTotalOn">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total OFF</div>
+        <div class="metric-value red" id="resTotalOff">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Total Time</div>
+        <div class="metric-value cyan" id="resTotal">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">ON Periods</div>
+        <div class="metric-value" id="resOnPeriods">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg ON</div>
+        <div class="metric-value green" id="resAvgOn">—</div>
+      </div>
+      <div class="metric">
+        <div class="metric-label">Avg OFF</div>
+        <div class="metric-value red" id="resAvgOff">—</div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:12px;">
+      <button class="btn-reset" onclick="reset()">↺ Reset</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- end mainContent -->
+
+<!-- MODAL -->
+<div id="modalOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(20,30,60,0.60);backdrop-filter:blur(6px);z-index:99999;align-items:center;justify-content:center;">
+  <div class="modal">
+    <div class="modal-icon">🚨</div>
+    <h2>HEY!!</h2>
+    <p>I SAID DON'T PUSH THIS!</p>
+    <button onclick="closeModal()">OK, Sorry!</button>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toastOverlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:99999;align-items:center;justify-content:center;pointer-events:none;">
+  <div id="toast" style="background:linear-gradient(135deg,#0891b2,#0e7490);color:white;font-family:'Nunito',sans-serif;font-size:20px;font-weight:800;padding:24px 40px;border-radius:20px;opacity:0;transform:scale(0.85);transition:opacity 0.22s,transform 0.22s;text-align:center;box-shadow:0 12px 48px rgba(6,182,212,0.5);max-width:80vw;"></div>
+</div>
+
+<script>
+  let totalOn=0, totalOff=0, state='off';
+  let lastTs=performance.now()/1000;
+  let running=true, onPeriods=[], offPeriods=[];
+
+  function snap() {
+    if (!running) return;
+    const now=performance.now()/1000;
+    const elapsed=now-lastTs;
+    if (state==='on') { totalOn+=elapsed; onPeriods.push(elapsed); }
+    else { totalOff+=elapsed; offPeriods.push(elapsed); }
+    lastTs=now;
+  }
+
+  function avg(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+
+  function fmt(s) {
+    if (s < 60) return s.toFixed(1)+'s';
+    const m=Math.floor(s/60), sec=s%60;
+    return m+'m '+sec.toFixed(1)+'s';
+  }
+
+  function setBadge(s) {
+    const b=document.getElementById('stateBadge');
+    b.className='state-badge';
+    if (s==='on')   { b.classList.add('state-on');   b.textContent='ON'; }
+    else if (s==='off') { b.classList.add('state-off'); b.textContent='OFF'; }
+    else            { b.classList.add('state-done'); b.textContent='FINISHED'; }
+  }
+
+  function setMsg(m) { document.getElementById('msg').textContent=m; }
+
+  function switchOn() {
+    if (!running || state==='on') return;
+    snap(); state='on'; setBadge('on'); setMsg('Switched to ON — timing started.');
+  }
+
+  function switchOff() {
+    if (!running || state==='off') return;
+    snap(); state='off'; setBadge('off'); setMsg('Switched to OFF — timing started.');
+  }
+
+  function finish() {
+    if (!running) return;
+    snap(); running=false; setBadge('done'); setMsg('Test complete.');
+    document.getElementById('onBtn').disabled=true;
+    document.getElementById('offBtn').disabled=true;
+    document.getElementById('finishBtn').disabled=true;
+
+    const avgOn=avg(onPeriods), avgOff=avg(offPeriods);
+    const totalAvg=avgOn+avgOff;
+    const duty=totalAvg>0 ? (avgOn/totalAvg)*100 : 0;
+    const dutyStr=duty.toFixed(2);
+
+    document.getElementById('resDuty').innerHTML=dutyStr+'<span> %</span>';
+    document.getElementById('resTotalOn').textContent=fmt(totalOn);
+    document.getElementById('resTotalOff').textContent=fmt(totalOff);
+    document.getElementById('resTotal').textContent=fmt(totalOn+totalOff);
+    document.getElementById('resOnPeriods').textContent=onPeriods.length+' / '+offPeriods.length;
+    document.getElementById('resAvgOn').textContent=fmt(avgOn);
+    document.getElementById('resAvgOff').textContent=fmt(avgOff);
+
+    document.getElementById('results').style.display='block';
+
+    // Rescale after results appear
+    setTimeout(scaleToFit, 50);
+
+    // Auto copy
+    copyToClipboard(dutyStr);
+  }
+
+  function reset() {
+    totalOn=0; totalOff=0; state='off';
+    lastTs=performance.now()/1000;
+    running=true; onPeriods=[]; offPeriods=[];
+    setBadge('off'); setMsg('');
+    document.getElementById('results').style.display='none';
+    document.getElementById('onBtn').disabled=false;
+    document.getElementById('offBtn').disabled=false;
+    document.getElementById('finishBtn').disabled=false;
+    setTimeout(scaleToFit, 50);
+  }
+
+  function copyToClipboard(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(()=>showToast('✓ '+text+'% — copied! Now you can paste it into Simpro')).catch(()=>fallbackCopy(text));
+    } else { fallbackCopy(text); }
+  }
+
+  function fallbackCopy(text) {
+    const ta=document.createElement('textarea');
+    ta.value=text; ta.style.cssText='position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    document.body.appendChild(ta); ta.focus(); ta.select();
+    try {
+      const ok=document.execCommand('copy');
+      showToast(ok ? '✓ '+text+'% — copied! Now you can paste it into Simpro' : text+'% — copy manually');
+    } catch(e) { showToast(text+'% — copy manually'); }
+    document.body.removeChild(ta);
+  }
+
+  let toastTimer;
+  function showToast(msg) {
+    const overlay=document.getElementById('toastOverlay');
+    const t=document.getElementById('toast');
+    t.textContent=msg; overlay.style.display='flex';
+    requestAnimationFrame(()=>{ t.style.opacity='1'; t.style.transform='scale(1)'; });
+    clearTimeout(toastTimer);
+    toastTimer=setTimeout(()=>{
+      t.style.opacity='0'; t.style.transform='scale(0.85)';
+      setTimeout(()=>{ overlay.style.display='none'; },250);
+    },2500);
+  }
+
+  function showModal() { document.getElementById('modalOverlay').style.display='flex'; }
+  function closeModal() { document.getElementById('modalOverlay').style.display='none'; }
+  document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+  // Scale to fit
+  function scaleToFit() {
+    const content=document.getElementById('mainContent');
+    content.style.transform='none';
+    const scale=Math.min(window.innerHeight/content.offsetHeight, window.innerWidth/content.offsetWidth, 1);
+    content.style.transformOrigin='center center';
+    content.style.transform=`scale(${scale})`;
+  }
+  window.addEventListener('load', scaleToFit);
+  window.addEventListener('resize', scaleToFit);
+  setTimeout(scaleToFit,100);
+  setTimeout(scaleToFit,500);
+
+  // FLOATING % SYMBOLS in background
+  const canvas=document.getElementById('boltCanvas');
+  const ctx=canvas.getContext('2d');
+  function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;}
+  resize();
+  window.addEventListener('resize',resize);
+
+  class FloatSymbol {
+    constructor(){this.reset(true);}
+    reset(initial){
+      this.x=Math.random()*window.innerWidth;
+      this.y=initial?Math.random()*window.innerHeight:-80;
+      this.size=24+Math.random()*40;
+      this.speedX=(Math.random()-0.5)*0.4;
+      this.speedY=0.4+Math.random()*0.6;
+      this.angle=(Math.random()-0.5)*0.4;
+      this.spin=(Math.random()-0.5)*0.015;
+      this.alpha=0.08+Math.random()*0.12;
+      this.wobble=Math.random()*Math.PI*2;
+      this.wobbleSpeed=0.018+Math.random()*0.02;
+      this.wobbleAmp=0.3+Math.random()*0.4;
+      const cols=['#06b6d4','#22c55e','#f59e0b','#1d7cf2'];
+      this.color=cols[Math.floor(Math.random()*cols.length)];
+    }
+    update(){
+      this.wobble+=this.wobbleSpeed;
+      this.x+=this.speedX+Math.sin(this.wobble)*this.wobbleAmp;
+      this.y+=this.speedY; this.angle+=this.spin;
+      if(this.y>window.innerHeight+80) this.reset(false);
+    }
+    draw(){
+      ctx.save();
+      ctx.translate(this.x,this.y);
+      ctx.rotate(this.angle);
+      ctx.globalAlpha=this.alpha;
+      ctx.font=`bold ${this.size}px sans-serif`;
+      ctx.fillStyle=this.color;
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText('%',0,0);
+      ctx.restore();
+    }
+  }
+
+  const symbols=Array.from({length:20},()=>new FloatSymbol());
+  function animate(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    symbols.forEach(s=>{s.update();s.draw();});
+    requestAnimationFrame(animate);
+  }
+  animate();
+</script>
+</body>
+</html>
